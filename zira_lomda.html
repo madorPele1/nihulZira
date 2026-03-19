@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ניהול זירת אירוע — פיקוד העורף</title>
+<style>
+:root{
+  --red:#dc2626;--amber:#f59e0b;--teal:#14b8a6;--green:#16a34a;
+  --dark:#0a0c10;--card:#111827;--border:#1f2937;
+  --txt:#f1f5f9;--muted:#94a3b8;--dim:#64748b;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{height:100%;background:var(--dark)}
+body{min-height:100%;height:100%;font-family:'Segoe UI',Arial,Helvetica,sans-serif;background:var(--dark);direction:rtl;overflow-x:hidden}
+
+/* ── LAYOUT ─────────────────────────────────────── */
+#app{display:flex;flex-direction:column;min-height:100vh;min-height:100dvh}
+
+/* ── SCENE ──────────────────────────────────────── */
+#scene{
+  position:relative;width:100%;
+  height:clamp(200px,42vh,360px);
+  overflow:hidden;flex-shrink:0;
+}
+#scene svg{position:absolute;inset:0;width:100%;height:100%}
+#hs-layer{position:absolute;inset:0;pointer-events:none}
+.hs{
+  position:absolute;transform:translate(-50%,-50%);
+  pointer-events:all;cursor:pointer;z-index:3;
+}
+.ring{
+  width:clamp(38px,11vw,50px);height:clamp(38px,11vw,50px);
+  border-radius:50%;border:2.5px solid;
+  display:flex;align-items:center;justify-content:center;
+  font-size:clamp(13px,4vw,19px);
+  transition:transform .15s;
+}
+.ring:active{transform:scale(.9)}
+.ring.amber{border-color:#f59e0b;background:rgba(245,158,11,.22);animation:pa 2s infinite}
+.ring.red{border-color:#dc2626;background:rgba(220,38,38,.22);animation:pr 2s infinite}
+.ring.teal{border-color:#14b8a6;background:rgba(20,184,166,.22);animation:pt 2s infinite}
+.ring.done{border-color:#22c55e;background:rgba(34,197,94,.18);animation:none}
+.hs-lbl{
+  position:absolute;bottom:calc(100% + 6px);
+  left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.85);color:#fff;
+  font-size:clamp(9px,2.5vw,11px);white-space:nowrap;
+  padding:2px 8px;border-radius:4px;pointer-events:none;
+}
+@keyframes pa{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.5)}50%{box-shadow:0 0 0 10px rgba(245,158,11,0)}}
+@keyframes pr{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}50%{box-shadow:0 0 0 10px rgba(220,38,38,0)}}
+@keyframes pt{0%,100%{box-shadow:0 0 0 0 rgba(20,184,166,.5)}50%{box-shadow:0 0 0 10px rgba(20,184,166,0)}}
+
+/* HUD */
+#hud{
+  position:absolute;top:0;left:0;right:0;
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 14px;pointer-events:none;z-index:4;
+}
+.badge{
+  background:rgba(10,12,16,.85);
+  border:1px solid rgba(255,255,255,.18);
+  color:var(--txt);font-size:clamp(10px,2.8vw,12px);
+  padding:4px 12px;border-radius:20px;
+}
+#clk{
+  background:rgba(127,29,29,.82);
+  border:1px solid rgba(220,38,38,.45);
+  color:#fca5a5;font-size:clamp(11px,3vw,14px);
+  padding:4px 11px;border-radius:20px;
+  font-family:'Courier New',monospace;
+}
+
+/* TAP HINT */
+#hint{
+  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.75);color:rgba(255,255,255,.8);
+  font-size:12px;padding:5px 14px;border-radius:20px;
+  pointer-events:none;z-index:4;
+  transition:opacity .6s;
+  white-space:nowrap;
+}
+
+/* ── PHASE TITLE ────────────────────────────────── */
+#ptbar{background:#0d1117;padding:10px 14px;border-top:1px solid var(--border)}
+#ptbar h3{font-size:clamp(12px,3.5vw,14px);font-weight:700;color:var(--txt);margin:0}
+#ptbar p{font-size:clamp(10px,2.6vw,12px);color:var(--dim);margin:2px 0 0}
+
+/* ── STATUS BAR ─────────────────────────────────── */
+#sbar{
+  background:#0f172a;padding:6px 14px;
+  display:flex;gap:14px;flex-wrap:wrap;
+  border-top:1px solid var(--border);
+}
+.si{display:flex;align-items:center;gap:5px;font-size:clamp(10px,2.6vw,12px);color:var(--muted)}
+.sd{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+/* ── PROGRESS BAR ───────────────────────────────── */
+#prog{
+  background:#080b12;padding:9px 14px;
+  display:flex;gap:6px;align-items:center;
+  overflow-x:auto;border-top:1px solid var(--border);
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+#prog::-webkit-scrollbar{display:none}
+.sp{
+  padding:6px 12px;border-radius:16px;
+  font-size:clamp(10px,2.5vw,11px);font-weight:700;
+  border:none;cursor:pointer;white-space:nowrap;flex-shrink:0;
+  -webkit-appearance:none;transition:transform .1s;
+}
+.sp:active{transform:scale(.95)}
+.sp.done{background:#166534;color:#bbf7d0}
+.sp.active{background:var(--red);color:#fff}
+.sp.locked{background:#1e2a3a;color:#4b5563;cursor:default}
+
+/* ── POPUP ──────────────────────────────────────── */
+#popup-wrap{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.58);z-index:100;
+  align-items:flex-end;justify-content:center;
+  -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
+}
+#popup-wrap.show{display:flex}
+#popup{
+  background:var(--card);
+  border-radius:20px 20px 0 0;width:100%;
+  max-width:600px;
+  max-height:80vh;overflow-y:auto;
+  padding:14px 18px calc(18px + env(safe-area-inset-bottom,0px));
+  border-top:2px solid var(--red);
+  -webkit-overflow-scrolling:touch;
+}
+.drag{
+  width:40px;height:4px;background:#334155;
+  border-radius:2px;margin:0 auto 16px;
+}
+#pop-tag{font-size:10px;font-weight:700;color:#f87171;letter-spacing:.08em;margin-bottom:5px}
+#pop-title{font-size:clamp(14px,4vw,16px);font-weight:700;color:var(--txt);margin-bottom:7px}
+#pop-body{font-size:clamp(12px,3.2vw,14px);color:var(--muted);line-height:1.7;margin-bottom:16px;white-space:pre-line}
+.chs{display:flex;flex-direction:column;gap:8px}
+.cb{
+  background:#0f172a;border:1px solid #334155;color:#cbd5e1;
+  font-size:clamp(13px,3.5vw,14px);
+  padding:13px 16px;border-radius:12px;
+  cursor:pointer;text-align:right;width:100%;
+  -webkit-appearance:none;transition:background .12s;
+  line-height:1.4;
+}
+.cb:active{background:#1a2a40}
+.cb.ok{background:#052e16;border-color:#22c55e;color:#86efac}
+.cb.no{background:#2d0000;border-color:#ef4444;color:#fca5a5}
+#pfb{
+  display:none;margin-top:12px;
+  padding:12px 16px;border-radius:12px;
+  font-size:clamp(12px,3.2vw,14px);line-height:1.65;
+}
+#pfb.ok{display:block;background:#052e16;border:1px solid #22c55e;color:#86efac}
+#pfb.no{display:block;background:#2d0000;border:1px solid #ef4444;color:#fca5a5}
+.pnav{display:flex;gap:9px;margin-top:14px}
+.pnav button{
+  flex:1;background:#1e293b;border:1px solid #334155;
+  color:var(--muted);font-size:clamp(13px,3.5vw,14px);
+  padding:12px;border-radius:12px;cursor:pointer;
+  -webkit-appearance:none;transition:background .12s;
+}
+.pnav button:active{background:#334155;color:var(--txt)}
+
+/* ── COMPLETE ───────────────────────────────────── */
+#complete{
+  display:none;
+  margin:14px;
+  background:linear-gradient(135deg,#052e16,#14532d);
+  border:1px solid #22c55e;border-radius:14px;
+  padding:20px;text-align:center;
+}
+#complete h2{color:#86efac;font-size:clamp(16px,5vw,20px);margin-bottom:8px}
+#complete p{color:#4ade80;font-size:clamp(12px,3.2vw,14px);line-height:1.6}
+#complete .stats{
+  display:flex;justify-content:center;gap:24px;
+  margin-top:16px;padding-top:16px;
+  border-top:1px solid rgba(74,222,128,.3);
+}
+#complete .stat-n{font-size:clamp(22px,7vw,28px);font-weight:700;color:#86efac}
+#complete .stat-l{font-size:clamp(10px,2.8vw,12px);color:#4ade80}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="scene">
+    <svg id="svgS" viewBox="0 0 400 240" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="hud">
+      <div id="clk">02:17</div>
+      <div class="badge" id="pbadge">שלב 1 / 6</div>
+    </div>
+    <div id="hs-layer"></div>
+    <div id="hint">לחצ/י על הנקודות המהבהבות</div>
+
+    <div id="popup-wrap">
+      <div id="popup">
+        <div class="drag"></div>
+        <div id="pop-tag"></div>
+        <div id="pop-title"></div>
+        <div id="pop-body"></div>
+        <div class="chs" id="pop-chs"></div>
+        <div id="pfb"></div>
+        <div class="pnav">
+          <button id="pcont" style="display:none" onclick="closeP()">המשך ←</button>
+          <button onclick="closeP()">סגור ✕</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="ptbar">
+    <h3 id="main-title">שלב 1 — קבלת פקודה ויציאה לזירה</h3>
+    <p id="main-sub">פגיעת טיל ישירה | רחוב הרצל 14, תל אביב | 02:17 לפנות בוקר</p>
+  </div>
+
+  <div id="sbar">
+    <div class="si"><div class="sd" style="background:#ef4444"></div><span id="s1">לכודים: לא ידוע</span></div>
+    <div class="si"><div class="sd" style="background:#60a5fa"></div><span id="s2">כוחות: אין</span></div>
+    <div class="si"><div class="sd" style="background:#f59e0b"></div><span id="s3">סכנות: עשן, אש</span></div>
+  </div>
+
+  <div id="prog">
+    <span style="font-size:10px;color:#4b5563;flex-shrink:0">שלב:</span>
+    <div id="steps" style="display:flex;gap:5px"></div>
+  </div>
+
+  <div id="complete">
+    <h2>כל הכבוד, מפקד/ת!</h2>
+    <p>ניהלת את זירת האירוע מא׳ ועד ת׳<br>רחוב הרצל 14 — האירוע טופל בהצלחה</p>
+    <div class="stats">
+      <div><div class="stat-n">3</div><div class="stat-l">לכודים חולצו</div></div>
+      <div><div class="stat-n">0</div><div class="stat-l">נפגעי כוחות</div></div>
+      <div><div class="stat-n">9</div><div class="stat-l">שלבים</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const phases=[
+{n:1,lbl:"קבלת פקודה",time:"02:17",title:"שלב 1 — קבלת פקודה",sub:"פגיעת טיל | הרצל 14 | 02:17 לפנות בוקר",
+ s1:"לא ידוע",s2:"אין",s3:"עשן, אש",
+ sc:{light:.06,rubble:.28,smoke:4,fire:1,forces:0,trapped:0},
+ hs:[
+  {x:55,y:56,cls:"amber",lbl:"מפקד בזירה",tag:"קבלת פקודה",
+   title:'קיבלת פקודת יציאה מחפ"ק',
+   body:'02:17 לפנות בוקר. פגיעת טיל ישירה.\nבניין 4 קומות. לכודים לא ידוע.\nאתה המפקד הראשון בזירה.\n\nמה הפעולה הראשונה שלך?',
+   ch:[{t:'א. מתחיל בסריקה מיידית',ok:false},{t:'ב. מקים עמדת פיקוד ומדווח לחפ"ק',ok:true},{t:'ג. ממתין לכוחות נוספים',ok:false}],
+   fok:'נכון. עמדת פיקוד ודיווח ראשוני — לפני כל פעולה מבצעית.',
+   ferr:'ללא עמדת פיקוד ודיווח — אין שליטה על הזירה.'},
+  {x:26,y:70,cls:"red",lbl:"אש פעילה",tag:"סכנה",
+   title:"אש בקומת הקרקע",
+   body:'נראית אש פעילה בקומת הקרקע.\nאין כב"ה עדיין.\n\nמה הגישה הנכונה?',
+   ch:[{t:'א. ניגש לכבות בכוחות עצמי',ok:false},{t:'ב. מסמן מרחק ומזמין כב"ה',ok:true},{t:'ג. מתעלם ומתמקד בלכודים',ok:false}],
+   fok:'מעולה. סיכון עצמי אסור — הזמן כב"ה וסמן אזור סכנה.',
+   ferr:'כוחות שנפגעים הופכים לנטל על הזירה.'}
+ ]},
+{n:2,lbl:"תמונת מצב",time:"02:31",title:"שלב 2 — גיבוש תמונת מצב",sub:'הגעת לזירה | 2 לכודים ידועים | יאמ"ח א׳ מגיע',
+ s1:"2 ידועים",s2:'יאמ"ח א׳',s3:"עשן, גז?",
+ sc:{light:.08,rubble:.5,smoke:5,fire:2,forces:1,trapped:2},
+ hs:[
+  {x:25,y:73,cls:"amber",lbl:"ניצול א׳",tag:"לכוד",
+   title:"ניצול א׳ — גבר, כ-50",
+   body:'מגיב לקריאה. כאב רב.\nתחת גוש בטון.\n\nמה עדיפות הפינוי?',
+   ch:[{t:'א. פינוי מיידי — עדיפות ראשונה',ok:true},{t:'ב. ממתין לניצול ב׳',ok:false},{t:'ג. מותיר לרפואה',ok:false}],
+   fok:'נכון. מגיב לקריאה + לחוץ = עדיפות גבוהה.',
+   ferr:'נפגע מגיב הוא עדיפות — אל תשאיר אותו ממתין.'},
+  {x:60,y:38,cls:"teal",lbl:"עמוד עשן",tag:"סכנת גז",
+   title:"עשן צהבהב — חשש לגז",
+   body:'עמוד עשן צהבהב-ירקרק עולה מהמרתף.\n\nמה הצעד הנכון?',
+   ch:[{t:'א. ממשיך — לא נראה מסוכן',ok:false},{t:'ב. מחכה לבדיקת גז לפני כניסה',ok:true},{t:'ג. מחלק מסכות ונכנס',ok:false}],
+   fok:'נכון. עשן צהבהב = חשד לגז. אסור להיכנס לפני בדיקה.',
+   ferr:'כניסה לאזור גז ללא בדיקה מסכנת את הכוח.'}
+ ]},
+{n:3,lbl:"ניתוק",time:"02:45",title:"שלב 3 — ניתוק תשתיות",sub:'קולות מהריסות | יאמ"ח א׳+ב׳, כב"ה, מד"א',
+ s1:"3 ידועים",s2:'יאמ"ח א׳+ב׳, כב"ה',s3:"חשמל, גז",
+ sc:{light:.12,rubble:.65,smoke:4,fire:2,forces:3,trapped:3},
+ hs:[
+  {x:73,y:33,cls:"red",lbl:"⚡ חשמל",tag:"סכנת התחשמלות",
+   title:"קווי חשמל קרועים על ההריסות",
+   body:'קווי חשמל חיים נוגעים בהריסות.\n\nמה הפעולה הנכונה?',
+   ch:[{t:'א. מנסה להזיז בכפפות',ok:false},{t:'ב. מדווח לחפ"ק לניתוק מיידי',ok:true},{t:'ג. זורק שמיכה מבודדת',ok:false}],
+   fok:'בדיוק. ניתוק רק דרך חפ"ק לחברת החשמל.',
+   ferr:'טיפול ישיר בחשמל חי הוא קטלני.'},
+  {x:33,y:75,cls:"amber",lbl:"לכוד ג׳",tag:"לכוד חדש",
+   title:"לכוד ג׳ — קומה 2, גישה חסומה",
+   body:'קול בכי מהקומה השנייה.\nגישה חסומה חלקית.\n\nאיך מגיעים?',
+   ch:[{t:'א. טיפוס ישיר על הריסות',ok:false},{t:'ב. מסלול בטוח + כוח מיומן',ok:true},{t:'ג. ממתין לציוד',ok:false}],
+   fok:'נכון. מסלול בטוח + כוח מיומן.',
+   ferr:'טיפוס לא מתוכנן עלול לגרום לקריסה נוספת.'}
+ ]},
+{n:4,lbl:"הסתעפות",time:"03:02",title:"שלב 4 — הגדרת נתיב",sub:"3 לכודים פעילים | כל הכוחות בשטח",
+ s1:"3 פעילים",s2:"כל הכוחות",s3:"קריסה חוזרת",
+ sc:{light:.2,rubble:.75,smoke:3,fire:1,forces:4,trapped:3},
+ hs:[
+  {x:42,y:65,cls:"red",lbl:"3 לכודים",tag:"דחוף",
+   title:"שלושה לכודים — חלוקת כוחות",
+   body:'3 לכודים, כולם מגיבים.\nכוח אחד מטפל בלכוד אחד.\n\nאיך מחלקים את הכוחות?',
+   ch:[{t:'א. כל הכוחות לאיש הכי קשה',ok:false},{t:'ב. כוח לכל לכוד בו-זמנית לפי מיון',ok:true},{t:'ג. ממתין להנחיות מחפ"ק',ok:false}],
+   fok:'מעולה. פעולה מקבילה עם מיון נכון — ניהול זירה אמיתי.',
+   ferr:'עיכוב או ריכוז כוחות עלול לסכן את האחרים.'}
+ ]},
+{n:5,lbl:"חילוץ",time:"04:10",title:"שלב 5–8 — מימוש החילוץ",sub:"3 חילוצים בו-זמנית | שליטה ובקרה",
+ s1:"1 חולץ, 2 בטיפול",s2:"כל הכוחות פעילים",s3:"קריסה חוזרת",
+ sc:{light:.4,rubble:.82,smoke:2,fire:0,forces:4,trapped:1},
+ hs:[
+  {x:48,y:70,cls:"teal",lbl:'פינוי מד"א',tag:"חילוץ",
+   title:'ניצול א׳ — חולץ בהצלחה',
+   body:'יאמ"ח א׳ חילץ את ניצול א׳.\nמד"א מקבל לטיפול.\n\nמה עושה המפקד עכשיו?',
+   ch:[{t:'א. הולך לעזור בחילוץ הבא',ok:false},{t:'ב. נשאר בעמדת פיקוד ומנהל',ok:true},{t:'ג. מעדכן את חפ"ק',ok:false}],
+   fok:'נכון. המפקד שומר על שליטה ובקרה — לא יורד לשטח.',
+   ferr:'המפקד לא חלק מצוות החילוץ — תפקידו לנהל.'}
+ ]},
+{n:6,lbl:"סגירה",time:"06:15",title:"שלב 9 — סגירת האירוע",sub:"כל הלכודים חולצו | העברה לרשות המקומית",
+ s1:"כולם חולצו ✓",s2:"מסיימים",s3:"אין",
+ sc:{light:.85,rubble:.88,smoke:0,fire:0,forces:4,trapped:0},
+ hs:[
+  {x:50,y:58,cls:"teal",lbl:"סגירת זירה",tag:"סיום",
+   title:"האירוע הסתיים בהצלחה",
+   body:"3 לכודים חולצו.\nאין נפגעי כוחות.\nהזירה מועברת לרשות המקומית.\n\n06:15 — תפקידך הסתיים.",
+   ch:[{t:'סיים ←',ok:true}],
+   fok:'כל הכבוד! ניהלת את זירת האירוע מא׳ ועד ת׳.',
+   ferr:''}
+ ]},
+];
+
+let cur=0;
+const done=new Set();
+
+function drawSVG(sc){
+  const W=400,H=240,L=sc.light;
+  let s="";
+  s+=`<defs>
+  <linearGradient id="gsky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="${L<.4?"#060c18":"#1a2535"}"/>
+    <stop offset="100%" stop-color="${L<.4?"#0d1520":"#243045"}"/>
+  </linearGradient>
+  <radialGradient id="gfire" cx="50%" cy="90%" r="55%">
+    <stop offset="0%" stop-color="#fff3a0" stop-opacity=".95"/>
+    <stop offset="35%" stop-color="#ff8c00" stop-opacity=".88"/>
+    <stop offset="75%" stop-color="#c0392b" stop-opacity=".6"/>
+    <stop offset="100%" stop-color="#7f0000" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="glamp" cx="50%" cy="100%" r="70%">
+    <stop offset="0%" stop-color="#ffe082" stop-opacity="${L*.5}"/>
+    <stop offset="100%" stop-color="#e65100" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="gdawn" cx="15%" cy="85%" r="50%">
+    <stop offset="0%" stop-color="#ff6d3b" stop-opacity="${Math.max(0,L-.45)*.9}"/>
+    <stop offset="100%" stop-color="#bf360c" stop-opacity="0"/>
+  </radialGradient>
+  </defs>`;
+
+  s+=`<rect x="0" y="0" width="${W}" height="${H}" fill="url(#gsky)"/>`;
+  if(L>.45) s+=`<rect x="0" y="0" width="${W}" height="${H}" fill="url(#gdawn)"/>`;
+
+  if(L<.25)[[40,18],[90,8],[160,22],[240,10],[310,18],[370,8],[60,40],[200,35],[340,28]].forEach(([x,y])=>{
+    s+=`<circle cx="${x}" cy="${y}" r="1.1" fill="#dde8ff" fill-opacity="${(.25-L)*3}"/>`;
+  });
+
+  s+=`<rect x="0" y="${H*.32}" width="${W}" height="${H*.68}" fill="${L>.4?"#182030":"#0a0e18"}"/>`;
+  [[0,.32,.09,.26],[.07,.27,.07,.31],[.14,.23,.10,.37],[.26,.30,.06,.28],[.54,.25,.08,.33],[.63,.20,.11,.38],[.74,.28,.07,.30],[.82,.18,.13,.40],[.94,.28,.06,.30]].forEach(([bx,by,bw,bh])=>{
+    s+=`<rect x="${W*bx}" y="${H*by}" width="${W*bw}" height="${H*bh}" fill="${L>.35?"#1e2a3a":"#080d16"}"/>`;
+    for(let r=0;r<3;r++) for(let c=0;c<Math.round(bw*W/16);c++){
+      if(L<.55&&Math.random()<.28) s+=`<rect x="${W*bx+c*14+3}" y="${H*by+r*20+6}" width="9" height="11" fill="#c8880a" fill-opacity=".85"/>`;
+    }
+  });
+
+  s+=`<rect x="0" y="${H*.68}" width="${W}" height="${H*.32}" fill="${L>.5?"#1a1410":"#0d0a06"}"/>`;
+  s+=`<rect x="0" y="${H*.82}" width="${W}" height="${H*.18}" fill="${L>.5?"#1c1c22":"#0c0c12"}"/>`;
+  for(let i=0;i<5;i++) s+=`<rect x="${30+i*76}" y="${H*.90}" width="50" height="4" rx="2" fill="#22222e" fill-opacity=".9"/>`;
+
+  const ry=H*.68,rh=sc.rubble;
+  s+=`<ellipse cx="${W*.40}" cy="${ry+H*.05}" rx="${W*.23}" ry="${H*.10*rh}" fill="#1a1008"/>`;
+  s+=`<ellipse cx="${W*.37}" cy="${ry+H*.02}" rx="${W*.18}" ry="${H*.08*rh}" fill="#251507"/>`;
+  [[.21,.61,.13,.08,-8],[.33,.58,.11,.07,4],[.44,.56,.15,.075,-3],[.59,.60,.10,.065,6]].forEach(([sx,sy,sw,sh,rot])=>{
+    s+=`<rect x="${W*sx}" y="${H*sy}" width="${W*sw}" height="${H*sh}" rx="2" fill="#2d1d0d" transform="rotate(${rot} ${W*(sx+sw/2)} ${H*(sy+sh/2)})"/>`;
+    s+=`<line x1="${W*(sx+.01)}" y1="${H*sy}" x2="${W*(sx+sw-.01)}" y2="${H*(sy+sh)}" stroke="#181818" stroke-width="1.2" stroke-opacity=".5"/>`;
+  });
+  s+=`<ellipse cx="${W*.39}" cy="${ry}" rx="${W*.16}" ry="${H*.055*rh}" fill="#3a2610"/>`;
+  [[.24,.70,.06,.04],[.42,.69,.05,.035],[.54,.68,.07,.045]].forEach(([cx,cy,cw,ch])=>{
+    s+=`<rect x="${W*cx}" y="${H*cy}" width="${W*cw}" height="${H*ch}" rx="2" fill="#281807"/>`;
+  });
+  if(rh>.3){
+    s+=`<rect x="${W*.20}" y="${H*(.22+.12*(1-rh))}" width="${W*.075}" height="${H*.46*rh}" fill="#171410"/>`;
+    s+=`<rect x="${W*.58}" y="${H*(.26+.10*(1-rh))}" width="${W*.055}" height="${H*.42*rh}" fill="#121010"/>`;
+  }
+
+  s+=`<rect x="${W*.03}" y="${H*.22}" width="${W*.11}" height="${H*.47}" fill="${L>.3?"#1c2028":"#111520"}"/>`;
+  for(let r=0;r<4;r++) for(let c=0;c<3;c++){
+    if(L<.6&&(r+c)%3===0) s+=`<rect x="${W*.04+c*16}" y="${H*.25+r*28}" width="13" height="18" rx="1" fill="#b8780a"/>`;
+    else s+=`<rect x="${W*.04+c*16}" y="${H*.25+r*28}" width="13" height="18" rx="1" fill="#070b14"/>`;
+  }
+  s+=`<rect x="${W*.83}" y="${H*.18}" width="${W*.13}" height="${H*.51}" fill="${L>.3?"#1c2028":"#111520"}"/>`;
+  for(let r=0;r<4;r++) for(let c=0;c<3;c++){
+    if(L<.6&&(r*c+1)%3===0) s+=`<rect x="${W*.84+c*17}" y="${H*.21+r*30}" width="14" height="20" rx="1" fill="#a8680a"/>`;
+    else s+=`<rect x="${W*.84+c*17}" y="${H*.21+r*30}" width="14" height="20" rx="1" fill="#060a12"/>`;
+  }
+
+  if(sc.smoke>0){
+    [[W*.30,H*.54],[W*.40,H*.50],[W*.36,H*.45],[W*.46,H*.48],[W*.24,H*.58]].slice(0,sc.smoke).forEach(([px,py],i)=>{
+      const r=38+i*16,c=["#455060","#374048","#506070","#3a4850"][i%4];
+      s+=`<ellipse cx="${px}" cy="${py}" rx="${r}" ry="${r*.65}" fill="${c}" fill-opacity="${.52-i*.05}"/>`;
+      s+=`<ellipse cx="${px-10}" cy="${py-22}" rx="${r*.65}" ry="${r*.52}" fill="${c}" fill-opacity="${.4-i*.04}"/>`;
+      s+=`<ellipse cx="${px+8}" cy="${py-15}" rx="${r*.55}" ry="${r*.45}" fill="#2d3848" fill-opacity=".3"/>`;
+    });
+  }
+
+  if(sc.fire>0){
+    [[W*.33,H*.67],[W*.44,H*.65]].slice(0,sc.fire).forEach(([fx,fy])=>{
+      s+=`<ellipse cx="${fx}" cy="${fy}" rx="48" ry="30" fill="url(#gfire)" fill-opacity=".88"/>`;
+      s+=`<path d="M${fx-10},${fy} Q${fx-4},${fy-30} ${fx+1},${fy-50} Q${fx+5},${fy-26} ${fx+12},${fy-22} Q${fx+9},${fy-40} ${fx+16},${fy-54} Q${fx+22},${fy-30} ${fx+18},${fy} Z" fill="#ff6d00" fill-opacity=".88"/>`;
+      s+=`<path d="M${fx-3},${fy} Q${fx+3},${fy-22} ${fx+7},${fy-35} Q${fx+11},${fy-20} ${fx+7},${fy} Z" fill="#ffcc02" fill-opacity=".82"/>`;
+    });
+    s+=`<ellipse cx="${W*.38}" cy="${H*.70}" rx="75" ry="22" fill="#e65100" fill-opacity="${sc.fire*.09}"/>`;
+  }
+
+  if(L>.15){
+    [W*.14,W*.30,W*.52,W*.68].slice(0,Math.ceil((L-.12)/.18)).forEach(lx=>{
+      s+=`<rect x="${lx-2.5}" y="${H*.60}" width="5" height="${H*.22}" fill="#555"/>`;
+      s+=`<rect x="${lx-18}" y="${H*.59}" width="36" height="10" rx="3" fill="#cc8800"/>`;
+      s+=`<ellipse cx="${lx}" cy="${H*.60}" rx="70" ry="55" fill="url(#glamp)"/>`;
+    });
+  }
+
+  if(sc.forces>0){
+    [[W*.65,H*.77,"#1b5e20"],[W*.71,H*.76,"#1b5e20"],[W*.77,H*.77,"#7f1d1d"],[W*.83,H*.76,"#0d47a1"]].slice(0,sc.forces).forEach(([fx,fy,fc])=>{
+      s+=`<ellipse cx="${fx}" cy="${fy-17}" rx="6" ry="7" fill="#c68642"/>`;
+      s+=`<rect x="${fx-6}" y="${fy-10}" width="12" height="16" rx="2" fill="${fc}"/>`;
+      s+=`<rect x="${fx-8}" y="${fy-20}" width="16" height="6" rx="2" fill="#2d2d2d"/>`;
+    });
+  }
+
+  if(sc.trapped>0){
+    [[W*.28,H*.74],[W*.40,H*.72],[W*.50,H*.75]].slice(0,sc.trapped).forEach(([tx,ty])=>{
+      s+=`<ellipse cx="${tx}" cy="${ty}" rx="19" ry="15" fill="#dc2626" fill-opacity=".2"/>`;
+      s+=`<ellipse cx="${tx}" cy="${ty-7}" rx="6" ry="7" fill="#c8835a"/>`;
+      s+=`<path d="M${tx+3},${ty-13} Q${tx+7},${ty-26} ${tx+5},${ty-34}" stroke="#c8835a" stroke-width="3.5" stroke-linecap="round" fill="none"/>`;
+    });
+  }
+
+  if(L>.1){
+    s+=`<rect x="${W*.82}" y="${H*.78}" width="65" height="38" rx="3" fill="#d0d0d8"/>`;
+    s+=`<rect x="${W*.83}" y="${H*.64}" width="54" height="18" rx="2" fill="#e8e8ee"/>`;
+    s+=`<rect x="${W*.845}" y="${H*.79}" width="6" height="18" fill="#dc2626"/>`;
+    s+=`<rect x="${W*.836}" y="${H*.83}" width="16" height="6" fill="#dc2626"/>`;
+    s+=`<ellipse cx="${W*.835}" cy="${H*.78+38}" rx="8" ry="8" fill="#222"/>`;
+    s+=`<ellipse cx="${W*.88}" cy="${H*.78+38}" rx="8" ry="8" fill="#222"/>`;
+  }
+
+  if(L>.7) for(let i=0;i<6;i++) s+=`<rect x="${50+i*55}" y="${H*.80}" width="48" height="8" fill="${i%2===0?"#eab308":"#111"}"/>`;
+
+  document.getElementById("svgS").innerHTML=s;
+}
+
+function buildHS(hs){
+  const lay=document.getElementById("hs-layer");
+  lay.innerHTML="";
+  const wrap=document.getElementById("scene");
+  const W=wrap.offsetWidth,H=wrap.offsetHeight;
+  hs.forEach((h,i)=>{
+    const id=cur+"_"+i,isDone=done.has(id);
+    const div=document.createElement("div");
+    div.className="hs";
+    div.style.left=(h.x/100*W)+"px";
+    div.style.top=(h.y/100*H)+"px";
+    div.style.pointerEvents="all";
+    const ring=document.createElement("div");
+    ring.className="ring "+(isDone?"done":h.cls);
+    ring.textContent=isDone?"✓":"●";
+    ring.style.fontSize=isDone?"18px":"11px";
+    const lbl=document.createElement("div");
+    lbl.className="hs-lbl";lbl.textContent=h.lbl;
+    div.appendChild(lbl);div.appendChild(ring);
+    div.addEventListener("click",e=>{e.stopPropagation();openP(h,id);});
+    div.addEventListener("touchend",e=>{e.preventDefault();e.stopPropagation();openP(h,id);},{passive:false});
+    lay.appendChild(div);
+  });
+  setTimeout(()=>{const h=document.getElementById("hint");if(h)h.style.opacity="0";},3500);
+}
+
+function openP(h,id){
+  document.getElementById("pop-tag").textContent=h.tag.toUpperCase();
+  document.getElementById("pop-title").textContent=h.title;
+  document.getElementById("pop-body").textContent=h.body;
+  const fb=document.getElementById("pfb");fb.className="";fb.textContent="";
+  const pc=document.getElementById("pcont");pc.style.display="none";
+  const ch=document.getElementById("pop-chs");ch.innerHTML="";
+  h.ch.forEach(c=>{
+    const btn=document.createElement("button");
+    btn.className="cb";btn.textContent=c.t;
+    btn.onclick=()=>{
+      document.querySelectorAll(".cb").forEach(b=>b.disabled=true);
+      if(c.ok){btn.classList.add("ok");fb.textContent=h.fok;fb.className="ok";done.add(id);buildHS(phases[cur].hs);checkAdv();}
+      else{btn.classList.add("no");fb.textContent=h.ferr;fb.className="no";}
+      pc.style.display="block";
+    };
+    ch.appendChild(btn);
+  });
+  document.getElementById("popup-wrap").classList.add("show");
+}
+
+function closeP(){document.getElementById("popup-wrap").classList.remove("show");}
+window.closeP=closeP;
+
+function checkAdv(){
+  const allDone=phases[cur].hs.every((_,i)=>done.has(cur+"_"+i));
+  if(allDone&&cur<phases.length-1) setTimeout(()=>go(cur+1),650);
+  if(allDone&&cur===phases.length-1) setTimeout(()=>{document.getElementById("complete").style.display="block";},650);
+}
+
+function buildSteps(){
+  const row=document.getElementById("steps");row.innerHTML="";
+  phases.forEach((p,i)=>{
+    const btn=document.createElement("button");
+    btn.className="sp "+(i<cur?"done":i===cur?"active":"locked");
+    btn.textContent=p.n+". "+p.lbl;
+    btn.onclick=()=>{if(i<=cur)go(i);};
+    row.appendChild(btn);
+  });
+}
+
+function go(i){
+  cur=i;const p=phases[i];
+  document.getElementById("clk").textContent=p.time;
+  document.getElementById("pbadge").textContent="שלב "+p.n+" / "+phases.length;
+  document.getElementById("main-title").textContent=p.title;
+  document.getElementById("main-sub").textContent=p.sub;
+  document.getElementById("s1").textContent="לכודים: "+p.s1;
+  document.getElementById("s2").textContent="כוחות: "+p.s2;
+  document.getElementById("s3").textContent="סכנות: "+p.s3;
+  drawSVG(p.sc);buildHS(p.hs);buildSteps();closeP();
+}
+
+go(0);
+window.addEventListener("resize",()=>{drawSVG(phases[cur].sc);buildHS(phases[cur].hs);});
+
+let ty0=0;
+document.getElementById("popup").addEventListener("touchstart",e=>{ty0=e.touches[0].clientY;},{passive:true});
+document.getElementById("popup").addEventListener("touchmove",e=>{if(e.touches[0].clientY-ty0>65)closeP();},{passive:true});
+</script>
+</body>
+</html>
